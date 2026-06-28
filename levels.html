@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI 库存完整分级 · S/A+/A/B/C/D</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--txt:#e6edf3;--mut:#8b949e;--up:#f85149;--dn:#3fb950;--accent:#58a6ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:13px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+header{padding:14px 20px;border-bottom:1px solid var(--border);background:var(--panel)}
+h1{margin:0;font-size:18px}
+.sub{color:var(--mut);font-size:12px;margin-top:4px}
+.statbar{display:flex;gap:10px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.stat{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);cursor:pointer;transition:all .2s}
+.stat:hover{border-color:var(--accent)}
+.stat.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.stat b{font-size:18px;display:block}
+.stat .lab{font-size:11px;color:var(--mut)}
+.stat.on .lab{color:rgba(255,255,255,0.85)}
+.grade-S{color:#ffd23f;font-weight:700}
+.grade-Aplus{color:#7ee787;font-weight:700}
+.grade-A{color:#a5d6ff;font-weight:600}
+.grade-B{color:#d2a8ff;font-weight:500}
+.grade-C{color:#ff9580;font-weight:500}
+.grade-D{color:#8b949e;font-weight:400}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 20px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:9}
+select,input{background:var(--bg);color:var(--txt);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px}
+input[type=text]{width:200px}
+.chip{padding:5px 12px;border:1px solid var(--border);border-radius:14px;cursor:pointer;color:var(--mut);font-size:12px}
+.chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.wrap{padding:0 20px 80px}
+.group{margin-bottom:30px}
+.gh{padding:12px 0 10px;font-size:15px;font-weight:600;border-bottom:2px solid var(--border);margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.gh .cnt{font-size:12px;color:var(--mut);font-weight:400}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{background:#11161d;color:var(--mut);font-weight:600;text-align:right;padding:9px 8px;border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;font-size:11.5px}
+th.l,td.l{text-align:left}
+td{padding:8px 8px;border-bottom:1px solid #21262d;text-align:right;white-space:nowrap;vertical-align:top;font-size:12px}
+tr.row{cursor:pointer}
+tr.row:hover{background:#1c2230}
+.nm{font-weight:600;color:var(--txt)}
+.cd{color:var(--mut);font-size:11px;margin-left:5px}
+.mkt{display:inline-block;padding:1px 6px;font-size:10px;border-radius:5px;background:#1c2433;color:#9fb4d6;border:1px solid #2b3650}
+.mkt.us{background:#1e2c3c;color:#79c0ff;border-color:#1f6feb}
+.mkt.jp{background:#3c2c1e;color:#ffb380;border-color:#bd5e1c}
+.mkt.cn{background:#3c1e2c;color:#ff80a8;border-color:#bd1c5e}
+.chain{font-size:11px;color:var(--mut)}
+.note{text-align:left;white-space:normal;color:#c9d1d9;font-size:11.5px;line-height:1.6;max-width:400px;padding-left:13px;border-left:2px solid #222c3a}
+.peg-good{color:#7ee787;font-weight:600}
+.peg-ok{color:#a5d6ff}
+.peg-bad{color:#ff9580}
+.peg-vbad{color:#f85149;font-weight:600}
+.pe-bad{color:#f85149}
+.pe-good{color:#7ee787}
+.growth-strong{color:#7ee787;font-weight:600}
+.growth-ok{color:#a5d6ff}
+.growth-low{color:#8b949e}
+.growth-neg{color:#f85149}
+.empty{text-align:center;color:var(--mut);padding:40px}
+.legend{color:var(--mut);font-size:11px;padding:8px 20px;background:#0e1319;border-bottom:1px solid var(--border)}
+.legend b{color:var(--txt)}
+.rack{display:inline-block;font-size:10px;padding:1px 6px;border-radius:5px;margin-left:5px}
+.rack-true{background:#1a3a1a;color:#7ee787;border:1px solid #2d6a2d}
+.rack-quasi{background:#2a2a1a;color:#ffd23f;border:1px solid #6a6a2d}
+.rack-nok{background:#2a1a2a;color:#d2a8ff;border:1px solid #6a2d6a}
+.rack-fail{background:#3a1a1a;color:#ff9580;border:1px solid #6a2d2d}
+.tip{position:absolute;background:var(--panel);border:1px solid var(--border);padding:10px;border-radius:8px;font-size:11px;z-index:100;max-width:300px;display:none}
+</style>
+</head>
+<body>
+
+<header>
+<h1>🎯 AI 库存完整分级 · S/A+/A/B/C/D</h1>
+<div class="sub">总 351 只 = 310 A 股 + 41 美日股 · 按三高(壁垒+毛利+增长) + PE + PEG + 机构关注综合评级 · 生成于 <span id="gen-time"></span></div>
+</header>
+
+<div class="statbar" id="statbar"></div>
+
+<div class="legend">
+<b>评级说明</b>:
+<span class="grade-S">S</span> 卡脖子级独家垄断 ·
+<span class="grade-Aplus">A+</span> 强护城河寡头 ·
+<span class="grade-A">A</span> 优质成长 ·
+<span class="grade-B">B</span> 中等 ·
+<span class="grade-C">C</span> 一般或风险 ·
+<span class="grade-D">D</span> 避免/亏损/泡沫
+<span style="margin-left:20px"></span>
+<b>PEG 颜色</b>: <span class="peg-good">&lt;1 便宜</span> · <span class="peg-ok">1-2 合理</span> · <span class="peg-bad">2-4 偏贵</span> · <span class="peg-vbad">&gt;4 极贵</span>
+</div>
+
+<div class="bar">
+<span>市场:</span>
+<span class="chip on" data-mkt="all">全部</span>
+<span class="chip" data-mkt="A股">A股</span>
+<span class="chip" data-mkt="美股">美股</span>
+<span class="chip" data-mkt="日股">日股</span>
+
+<span style="margin-left:10px">产业链:</span>
+<select id="chain-sel">
+<option value="all">全部</option>
+</select>
+
+<span style="margin-left:10px">搜索:</span>
+<input type="text" id="search" placeholder="代码 / 名称 / 关键词">
+
+<span style="margin-left:auto;color:var(--mut);font-size:11px" id="count-info">—</span>
+</div>
+
+<div class="wrap" id="content"></div>
+
+<script src="ai_levels_feed.js"></script>
+<script>
+let DATA = null;
+let FILTERS = {market: 'all', chain: 'all', search: '', grade: 'all'};
+
+function fmt_num(n, suffix='') {
+  if (n === null || n === undefined || n === '') return '—';
+  if (typeof n !== 'number') n = parseFloat(n);
+  if (isNaN(n)) return '—';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k' + suffix;
+  if (n >= 100) return n.toFixed(0) + suffix;
+  return n.toFixed(1) + suffix;
+}
+
+function fmt_mcap(usd_b) {
+  if (!usd_b) return '—';
+  if (usd_b >= 1000) return '$' + (usd_b/1000).toFixed(2) + 'T';
+  if (usd_b >= 100) return '$' + usd_b.toFixed(0) + 'B';
+  return '$' + usd_b.toFixed(1) + 'B';
+}
+
+function peg_class(peg) {
+  if (peg === null || peg === undefined) return '';
+  if (peg < 1) return 'peg-good';
+  if (peg < 2) return 'peg-ok';
+  if (peg < 4) return 'peg-bad';
+  return 'peg-vbad';
+}
+
+function growth_class(g) {
+  if (g === null || g === undefined) return '';
+  if (g >= 30) return 'growth-strong';
+  if (g >= 10) return 'growth-ok';
+  if (g >= 0) return 'growth-low';
+  return 'growth-neg';
+}
+
+function market_class(mkt) {
+  if (mkt === 'A股') return 'cn';
+  if (mkt && mkt.includes('美股')) return 'us';
+  if (mkt === '日股') return 'jp';
+  return '';
+}
+
+function rack_badge(v) {
+  if (!v) return '';
+  const cls = v === '真三高' ? 'rack-true' : (v === '准三高' ? 'rack-quasi' : (v === 'NOK叙事型' ? 'rack-nok' : 'rack-fail'));
+  return `<span class="rack ${cls}">${v}</span>`;
+}
+
+function render_stats() {
+  const bar = document.getElementById('statbar');
+  const grades = ['all', 'S', 'A+', 'A', 'B', 'C', 'D', '未评级'];
+  const totals = {all: DATA.total};
+  for (const s of DATA.stocks) {
+    totals[s.grade] = (totals[s.grade] || 0) + 1;
+  }
+  bar.innerHTML = grades.map(g => {
+    const cnt = totals[g] || 0;
+    const lab = g === 'all' ? '全部' : (g === '未评级' ? '未评级' : g + ' 级');
+    const colorCls = (g === 'all' || g === '未评级') ? '' : ('grade-' + (g === 'A+' ? 'Aplus' : g));
+    return `<div class="stat ${FILTERS.grade === g ? 'on' : ''}" data-grade="${g}">
+      <b class="${colorCls}">${cnt}</b><span class="lab">${lab}</span>
+    </div>`;
+  }).join('');
+  bar.querySelectorAll('.stat').forEach(el => {
+    el.onclick = () => {
+      FILTERS.grade = el.dataset.grade;
+      render_stats();
+      render_table();
+    };
+  });
+}
+
+function render_chains() {
+  const sel = document.getElementById('chain-sel');
+  const chains = new Set();
+  for (const s of DATA.stocks) {
+    if (s.chain) {
+      s.chain.split(',').forEach(c => chains.add(c.trim()));
+    }
+  }
+  sel.innerHTML = '<option value="all">全部</option>' +
+    [...chains].sort().map(c => `<option value="${c}">${c}</option>`).join('');
+  sel.onchange = () => {
+    FILTERS.chain = sel.value;
+    render_table();
+  };
+}
+
+function filter_stocks() {
+  return DATA.stocks.filter(s => {
+    if (FILTERS.market !== 'all' && s.market !== FILTERS.market && !(FILTERS.market === '美股' && s.market && s.market.includes('美股'))) {
+      if (FILTERS.market === 'A股' && s.market !== 'A股') return false;
+      if (FILTERS.market === '美股' && !s.market.includes('美股')) return false;
+      if (FILTERS.market === '日股' && s.market !== '日股') return false;
+    }
+    if (FILTERS.chain !== 'all' && (!s.chain || !s.chain.includes(FILTERS.chain))) return false;
+    if (FILTERS.grade !== 'all' && s.grade !== FILTERS.grade) return false;
+    if (FILTERS.search) {
+      const q = FILTERS.search.toLowerCase();
+      const hay = (s.code + s.name + (s.segment || '') + (s.note || '')).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function render_table() {
+  const stocks = filter_stocks();
+  document.getElementById('count-info').textContent = `共 ${stocks.length} 只`;
+
+  const content = document.getElementById('content');
+  if (stocks.length === 0) {
+    content.innerHTML = '<div class="empty">没有符合条件的标的</div>';
+    return;
+  }
+
+  // 按 grade 分组
+  const groups = {};
+  for (const s of stocks) {
+    if (!groups[s.grade]) groups[s.grade] = [];
+    groups[s.grade].push(s);
+  }
+
+  const grade_order = ['S', 'A+', 'A', 'B', 'C', 'D', '未评级'];
+  const grade_desc = {
+    'S': '🏆 卡脖子级 - 独家或近独家垄断,不可替代',
+    'A+': '🥇 强护城河 - 寡头/事实垄断,深度护城河',
+    'A': '🥈 优质成长 - 行业龙头,有竞争但黏性强',
+    'B': '🥉 中等 - 有一定壁垒,但增长/估值一般',
+    'C': '⚠️ 一般或风险 - 普通玩家,估值偏高或风险大',
+    'D': '🚫 避免 - 亏损/泡沫/被替代/质量差',
+    '未评级': '❓ 数据不足 - 缺财务预测/未上市,暂不评级(非负面)',
+  };
+
+  let html = '';
+  for (const g of grade_order) {
+    if (!groups[g]) continue;
+    const list = groups[g];
+    html += `<div class="group">
+      <div class="gh"><span class="grade-${g === 'A+' ? 'Aplus' : g}">${g === '未评级' ? g : g + ' 级'}</span>
+        <span class="cnt">${list.length} 只 · ${grade_desc[g] || ''}</span></div>
+      <table>
+        <thead><tr>
+          <th class="l">代码 / 名称</th>
+          <th class="l">市场</th>
+          <th class="l">产业链 / 细分</th>
+          <th>市值</th>
+          <th>PE</th>
+          <th>PEG</th>
+          <th>增长%</th>
+          <th>评分</th>
+          <th>机构</th>
+          <th class="l">备注 / 三高判定</th>
+        </tr></thead>
+        <tbody>`;
+
+    for (const s of list) {
+      const note = s.note || s.reason || s.rack_reason || '';
+      const margin_info = s.gross_margin_str ? `<br><span style="color:#8b949e;font-size:10.5px">毛${s.gross_margin_str} 净${s.net_margin_str || '—'}</span>` : '';
+      html += `<tr class="row">
+        <td class="l"><span class="nm">${s.name}</span><span class="cd">${s.code}</span></td>
+        <td class="l"><span class="mkt ${market_class(s.market)}">${s.market}</span></td>
+        <td class="l"><span class="chain">${s.chain || '—'}</span><br><span style="color:#8b949e;font-size:10.5px">${s.segment || ''}</span></td>
+        <td>${fmt_mcap(s.mcap_usd_b)}</td>
+        <td class="${s.pe && s.pe > 80 ? 'pe-bad' : (s.pe && s.pe < 20 ? 'pe-good' : '')}">${s.pe ? s.pe.toFixed(0) : '—'}</td>
+        <td class="${peg_class(s.peg)}">${s.peg !== null && s.peg !== undefined ? s.peg.toFixed(2) : '—'}</td>
+        <td class="${growth_class(s.growth)}">${s.growth ? s.growth.toFixed(0) + '%' : '—'}</td>
+        <td>${s.score}</td>
+        <td>${s.rpt_total ? s.rpt_total + '篇<br><span style="color:#8b949e;font-size:10px">' + s.buy_rate + '%买入</span>' : '—'}</td>
+        <td class="note">${note}${rack_badge(s.rack_verdict)}${margin_info}</td>
+      </tr>`;
+    }
+    html += '</tbody></table></div>';
+  }
+  content.innerHTML = html;
+}
+
+async function init() {
+  DATA = window.__LEVELS__;
+  document.querySelector('.sub').textContent = `总 ${DATA.total} 只 · 按三高(壁垒+毛利+增长)+PE+PEG+机构关注综合评级 · 生成于 ${DATA.generated_at}`;
+
+  render_stats();
+  render_chains();
+  render_table();
+
+  // 市场 chip
+  document.querySelectorAll('.chip[data-mkt]').forEach(el => {
+    el.onclick = () => {
+      document.querySelectorAll('.chip[data-mkt]').forEach(x => x.classList.remove('on'));
+      el.classList.add('on');
+      FILTERS.market = el.dataset.mkt;
+      render_table();
+    };
+  });
+
+  // 搜索
+  document.getElementById('search').oninput = (e) => {
+    FILTERS.search = e.target.value.trim();
+    render_table();
+  };
+}
+
+init().catch(e => {
+  document.getElementById('content').innerHTML = '<div class="empty">加载失败: ' + e.message + '</div>';
+});
+</script>
+
+</body>
+</html>
