@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>牛研社 — A 股策略研究 Agent</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1211; --panel: #151918; --text: #eef2ef; --muted: #8c9691;
+      --line: rgba(238,242,239,.1); --accent: #8fd18f; --accent-2: #d7b56d;
+      --danger: #d98679; --shadow: rgba(0,0,0,.38);
+      --mono: "SFMono-Regular","JetBrains Mono","Menlo",monospace;
+      --sans: "Avenir Next","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    }
+    *{box-sizing:border-box} html{scroll-behavior:smooth}
+    body{margin:0;min-height:100dvh;font-family:var(--sans);
+      background:radial-gradient(circle at 16% 8%,rgba(143,209,143,.16),transparent 31rem),
+        radial-gradient(circle at 80% 18%,rgba(215,181,109,.12),transparent 26rem),
+        linear-gradient(135deg,#0d100f 0%,#111513 46%,#0d0f0e 100%);
+      color:var(--text);overflow-x:hidden}
+    body::before{content:"";position:fixed;inset:0;pointer-events:none;
+      background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+      background-size:42px 42px;mask-image:linear-gradient(to bottom,rgba(0,0,0,.75),transparent 78%)}
+    a{color:inherit;text-decoration:none} button{font:inherit;cursor:pointer}
+    .shell{width:min(1440px,calc(100% - 48px));margin:0 auto}
+    .nav{position:sticky;top:14px;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:24px;
+      margin-top:14px;padding:12px 14px 12px 18px;border:1px solid var(--line);border-radius:999px;
+      background:rgba(15,18,17,.78);backdrop-filter:blur(18px);
+      box-shadow:0 20px 60px -30px var(--shadow),inset 0 1px 0 rgba(255,255,255,.08)}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:720;letter-spacing:-.04em}
+    .brand-mark{width:30px;height:30px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#314235);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 10px 24px rgba(143,209,143,.18);position:relative}
+    .brand-mark::after{content:"";position:absolute;width:8px;height:8px;right:7px;top:7px;border-radius:50%;background:#0f1211}
+    .nav-links{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:14px}
+    .nav-links a{padding:9px 12px;border-radius:999px;transition:.25s ease}
+    .nav-links a:hover{color:var(--text);background:rgba(255,255,255,.06)}
+    .nav-cta{padding:10px 15px;border:1px solid rgba(143,209,143,.35);border-radius:999px;color:#dff2df;background:rgba(143,209,143,.12);transition:transform .2s ease,background .2s ease}
+    .nav-cta:active{transform:translateY(1px) scale(.99)}
+
+    .hero{min-height:calc(100dvh - 80px);display:grid;grid-template-columns:minmax(0,1.15fr) minmax(360px,.85fr);gap:48px;align-items:center;padding:72px 0 46px}
+    .eyebrow{color:var(--accent);font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+    h1{margin:18px 0 20px;font-size:clamp(48px,8vw,112px);line-height:.88;letter-spacing:-.085em;max-width:900px}
+    .hero-copy{max-width:680px;color:#b9c2bd;font-size:clamp(17px,1.6vw,22px);line-height:1.7}
+    .hero-actions{display:flex;flex-wrap:wrap;gap:14px;margin-top:34px}
+    .btn{border:1px solid var(--line);border-radius:18px;padding:13px 18px;color:var(--text);background:rgba(255,255,255,.055);transition:transform .2s,background .2s,border-color .2s}
+    .btn:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.18)}
+    .btn:active{transform:translateY(1px) scale(.985)}
+    .btn.primary{background:#dcefdc;color:#101411;border-color:#dcefdc}
+
+    .terminal-card{border:1px solid var(--line);border-radius:34px;background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.035));box-shadow:0 34px 90px -50px var(--shadow),inset 0 1px 0 rgba(255,255,255,.1);overflow:hidden}
+    .terminal-top{display:flex;justify-content:space-between;gap:14px;padding:18px 20px;border-bottom:1px solid var(--line);color:var(--muted);font-family:var(--mono);font-size:12px}
+    .lights{display:flex;gap:8px;align-items:center}
+    .light{width:9px;height:9px;border-radius:50%;background:var(--accent);opacity:.8}
+    .light:nth-child(2){background:var(--accent-2)} .light:nth-child(3){background:var(--danger)}
+    .terminal-body{padding:22px}
+    .status-row{display:grid;grid-template-columns:1fr auto;gap:18px;padding:16px 0;border-bottom:1px solid var(--line)}
+    .status-row:last-child{border-bottom:0}
+    .status-row small{display:block;color:var(--muted);margin-bottom:6px}
+    .status-row strong{font-family:var(--mono);font-size:23px;letter-spacing:-.04em}
+    .pill{justify-self:end;align-self:center;padding:7px 10px;border-radius:999px;border:1px solid rgba(143,209,143,.3);color:#cbeccb;background:rgba(143,209,143,.1);font-family:var(--mono);font-size:12px}
+    .pill.danger{border-color:rgba(217,134,121,.3);color:#ecc9c2;background:rgba(217,134,121,.1)}
+    .pill.warning{border-color:rgba(215,181,109,.3);color:#ece2c9;background:rgba(215,181,109,.1)}
+    .sparkline{width:100%;height:78px;margin-top:18px;border-radius:20px;background:rgba(0,0,0,.16);position:relative;overflow:hidden}
+    .sparkline svg{position:absolute;inset:0;width:100%;height:100%}
+
+    section{padding:70px 0}
+    .section-head{display:grid;grid-template-columns:minmax(0,.85fr) minmax(280px,.5fr);gap:34px;align-items:end;margin-bottom:32px}
+    .section-head h2{margin:0;font-size:clamp(34px,5vw,68px);line-height:.95;letter-spacing:-.07em}
+    .section-head p{margin:0;color:var(--muted);line-height:1.75}
+
+    .panel{border:1px solid var(--line);border-radius:28px;background:rgba(21,25,24,.72);box-shadow:inset 0 1px 0 rgba(255,255,255,.06);padding:24px}
+    .panel h3{margin:0 0 14px;font-size:24px;letter-spacing:-.04em}
+    .panel p{margin:0;color:var(--muted);line-height:1.7}
+
+    /* 热力图 */
+    .heatmap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:20px}
+    .heat-cell{border-radius:16px;padding:14px;border:1px solid var(--line);cursor:pointer;transition:transform .2s,border-color .2s;display:flex;flex-direction:column;gap:6px}
+    .heat-cell:hover{transform:translateY(-2px);border-color:rgba(143,209,143,.4)}
+    .heat-cell .hc-name{font-size:13px;color:var(--text)}
+    .heat-cell .hc-pct{font-family:var(--mono);font-size:20px;font-weight:700;letter-spacing:-.04em}
+    .heat-cell .hc-score{font-family:var(--mono);font-size:11px;color:var(--muted)}
+    .heat-cell .hc-inflow{font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+    /* 排名表 */
+    .ranking-table{width:100%;border-collapse:collapse;margin-top:20px;font-size:13px}
+    .ranking-table th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+    .ranking-table td{padding:10px 12px;border-bottom:1px solid var(--line);font-family:var(--mono)}
+    .ranking-table tr.selected td{color:var(--accent)}
+    .ranking-table tr.selected td:first-child::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:8px}
+    .score-bar{width:60px;height:6px;border-radius:3px;background:rgba(255,255,255,.1);display:inline-block;vertical-align:middle;margin-left:6px}
+    .score-fill{height:100%;border-radius:3px;background:var(--accent)}
+
+    /* 回测 */
+    .chart-area{min-height:300px;margin-top:20px;padding:16px;border:1px solid var(--line);border-radius:20px;background:rgba(0,0,0,.12)}
+    #nav-chart{width:100%;height:260px}
+    .bt-results{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:24px}
+    .bt-metric{padding:18px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.035)}
+    .bt-metric small{display:block;color:var(--muted);margin-bottom:8px;font-size:12px}
+    .bt-metric strong{font-family:var(--mono);font-size:26px;letter-spacing:-.06em}
+    .bt-metric.positive strong{color:var(--accent)}
+    .bt-metric.negative strong{color:var(--danger)}
+
+    .trade-log{margin-top:20px;max-height:320px;overflow-y:auto;border:1px solid var(--line);border-radius:20px}
+    .trade-log table{width:100%;border-collapse:collapse;font-size:12px}
+    .trade-log th{position:sticky;top:0;background:rgba(21,25,24,.95);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:400;font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+    .trade-log td{padding:8px 12px;border-bottom:1px solid var(--line);font-family:var(--mono)}
+    .trade-log td.action-buy{color:var(--accent)} .trade-log td.action-sell{color:var(--accent-2)} .trade-log td.action-stop_loss{color:var(--danger)}
+
+    /* 聪明钱 */
+    .smart-table{width:100%;border-collapse:collapse;margin-top:20px;font-size:13px}
+    .smart-table th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+    .smart-table td{padding:10px 12px;border-bottom:1px solid var(--line);font-family:var(--mono)}
+
+    /* 盘报 */
+    .brief-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px}
+    .brief-card{border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.035);padding:20px}
+    .brief-card h4{margin:0 0 12px;font-size:16px;letter-spacing:-.03em}
+    .brief-card ul{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+    .brief-card li{color:var(--muted);line-height:1.6;font-size:14px}
+    .brief-card li strong{color:var(--text);font-family:var(--mono)}
+
+    /* 风控 */
+    .risk{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    .risk-card{padding:20px;border:1px solid var(--line);border-radius:24px;background:rgba(255,255,255,.035);min-height:190px}
+    .risk-card small{color:var(--muted);font-family:var(--mono)}
+    .risk-card h3{margin:18px 0 10px;font-size:24px;letter-spacing:-.04em}
+    .risk-card p{margin:0;color:var(--muted);line-height:1.65}
+    .risk-card.active{background:rgba(143,209,143,.14);border-color:rgba(143,209,143,.35);box-shadow:0 0 30px rgba(143,209,143,.08)}
+
+    .pipeline{display:grid;grid-template-columns:1.2fr .8fr 1fr;gap:16px;align-items:stretch}
+    .step-list{margin-top:24px;display:grid;gap:12px}
+    .step{display:grid;grid-template-columns:42px 1fr;gap:14px;align-items:start;padding:14px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.035)}
+    .num{width:42px;height:42px;border-radius:16px;display:grid;place-items:center;color:#0f1211;background:var(--accent);font-family:var(--mono);font-weight:800}
+    .step strong{display:block;margin-bottom:4px} .step span{color:var(--muted);font-size:14px;line-height:1.6}
+    .logic-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
+    .metric{padding:16px;border-top:1px solid var(--line)} .metric small{display:block;color:var(--muted);margin-bottom:8px}
+    .metric strong{font-family:var(--mono);font-size:28px;letter-spacing:-.06em}
+
+    .report{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .report-card{border:1px solid var(--line);border-radius:30px;background:rgba(21,25,24,.76);overflow:hidden}
+    .report-card header{padding:20px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:14px;color:var(--muted);font-family:var(--mono);font-size:12px}
+    .report-card .content{padding:22px}
+    .checklist{display:grid;gap:13px}
+    .check{display:grid;grid-template-columns:20px 1fr;gap:10px;color:#c9d2cc;line-height:1.6}
+    .check::before{content:"";width:12px;height:12px;margin-top:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(143,209,143,.12)}
+
+    .footer{padding:34px 0 56px;color:var(--muted);border-top:1px solid var(--line)}
+    .footer .shell{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+    .loading{display:inline-block;width:16px;height:16px;border:2px solid var(--muted);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .fade-in{animation:fadeIn .8s cubic-bezier(.16,1,.3,1) both}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+    .error-text{color:var(--danger);font-size:14px}
+
+    @media(max-width:980px){
+      .shell{width:min(100% - 28px,760px)} .nav{border-radius:24px;align-items:flex-start}
+      .nav-links{display:none} .hero,.section-head,.pipeline,.report,.brief-grid{grid-template-columns:1fr}
+      .hero{min-height:auto;padding-top:52px} .pipeline,.risk,.bt-results{grid-template-columns:1fr}
+      .terminal-card{order:-1}
+    }
+  </style>
+</head>
+<body>
+  <nav class="shell nav">
+    <a class="brand" href="#top"><span class="brand-mark"></span><span>牛研社</span></a>
+    <div class="nav-links">
+      <a href="#heatmap">热力图</a>
+      <a href="#lab">策略实验室</a>
+      <a href="#smart">聪明钱</a>
+      <a href="#brief">盘报</a>
+      <a href="#risk">风控</a>
+    </div>
+    <button class="nav-cta" onclick="document.getElementById('lab').scrollIntoView()">打开研究台</button>
+  </nav>
+
+  <main id="top" class="shell">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="fade-in">
+        <div class="eyebrow">A-SHARE RESEARCH AGENT / REAL DATA / MULTI-STRATEGY SCORING</div>
+        <h1>别让 AI 选股。让它盯住规则。</h1>
+        <p class="hero-copy">真实 ETF 行情、多策略评分（动量/趋势/量价/风险）、主力资金流追踪、确定性回测引擎、风控状态机自动降仓。参考 stockgod.xyz 的五方独立判读思路，LLM 不做交易大脑。</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="#heatmap">查看热力图</a>
+          <a class="btn" href="#brief">今日盘报</a>
+        </div>
+      </div>
+      <aside class="terminal-card fade-in">
+        <div class="terminal-top"><span>research-runner / live</span><span class="lights"><i class="light"></i><i class="light"></i><i class="light"></i></span></div>
+        <div class="terminal-body" id="terminal-body">
+          <div class="status-row"><div><small>市场状态</small><strong id="market-state"><span class="loading"></span></strong></div><span class="pill" id="market-pill">--</span></div>
+          <div class="status-row"><div><small>仓位上限</small><strong id="position-cap">--</strong></div><span class="pill" id="cap-pill">RISK CAP</span></div>
+          <div class="status-row"><div><small>沪深300</small><strong id="hs300-close">--</strong></div><span class="pill" id="hs300-pill">--</span></div>
+          <div class="sparkline" id="sparkline-container"><svg viewBox="0 0 420 96" preserveAspectRatio="none"><path d="M0 48 L420 48" stroke="rgba(140,150,145,.3)" stroke-width="2"/></svg></div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- 热力图 -->
+    <section id="heatmap">
+      <div class="section-head">
+        <h2>ETF 热力图</h2>
+        <p>19 只 ETF 按涨跌幅着色，红跌绿涨。鼠标悬停看评分、动量、RSI 和主力资金。</p>
+      </div>
+      <div class="panel">
+        <h3>全景热力</h3>
+        <p>颜色深浅 = 涨跌幅幅度；左上角分数 = 多策略综合评分。</p>
+        <div class="heatmap-grid" id="heatmap-grid"><span class="loading"></span> 加载中…</div>
+      </div>
+    </section>
+
+    <!-- 策略实验室 -->
+    <section id="lab">
+      <div class="section-head">
+        <h2>策略实验室：真实数据，真实回测。</h2>
+        <p>多策略评分（动量40分 + 趋势30分 + 量价15分 + 风险15分）、ETF 动量排名、真实历史回测。</p>
+      </div>
+      <div style="display:grid;grid-template-columns:.85fr 1.15fr;gap:16px">
+        <aside class="panel">
+          <h3>ETF 多策略排名</h3>
+          <p>按综合评分降序，绿色标记 Top4 候选。含 RSI、量比、波动率。</p>
+          <div id="ranking-container" style="margin-top:20px"><span class="loading"></span> 加载中…</div>
+        </aside>
+        <article class="panel">
+          <div class="eyebrow">BACKTEST / REAL DATA / NOT FINANCIAL ADVICE</div>
+          <h3>回测结果（2024-01 至今）</h3>
+          <p>初始资金 100 万，佣金万三 + 滑点千一，含止损和冷却。</p>
+          <div class="chart-area"><div id="nav-chart"></div></div>
+          <div class="bt-results" id="bt-results">
+            <div class="bt-metric"><small>总收益</small><strong id="bt-total-return"><span class="loading"></span></strong></div>
+            <div class="bt-metric"><small>年化收益</small><strong id="bt-annual"><span class="loading"></span></strong></div>
+            <div class="bt-metric negative"><small>最大回撤</small><strong id="bt-drawdown"><span class="loading"></span></strong></div>
+            <div class="bt-metric"><small>滚动胜率</small><strong id="bt-winrate"><span class="loading"></span></strong></div>
+          </div>
+          <div class="trade-log" id="trade-log-container" style="margin-top:20px">
+            <table><thead><tr><th>日期</th><th>动作</th><th>标的</th><th>价格</th><th>份额</th></tr></thead><tbody id="trade-log-body"></tbody></table>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 聪明钱 -->
+    <section id="smart">
+      <div class="section-head">
+        <h2>主力资金 / 聪明钱追踪</h2>
+        <p>参考 stockgod.xyz 的聪明钱功能，追踪 ETF 主力净流入，判断资金真实方向。</p>
+      </div>
+      <div class="panel">
+        <h3>主力净流入排名</h3>
+        <p>正数 = 主力净流入，负数 = 主力净流出。单位：万元。</p>
+        <table class="smart-table" id="smart-table">
+          <thead><tr><th>代码</th><th>名称</th><th>最新价</th><th>涨跌幅</th><th>主力净流入(万)</th><th>净占比</th></tr></thead>
+          <tbody id="smart-body"><tr><td colspan="6"><span class="loading"></span></td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 盘报 -->
+    <section id="brief">
+      <div class="section-head">
+        <h2>今日盘报</h2>
+        <p>自动生成当日市场摘要：状态、Top5 动量、候选池、涨跌统计。</p>
+      </div>
+      <div class="brief-grid" id="brief-grid"><div class="brief-card"><h4>加载中…</h4></div></div>
+    </section>
+
+    <!-- 链路 -->
+    <section id="pipeline">
+      <div class="section-head">
+        <h2>投研不是观点流，是一条可复验流水线。</h2>
+        <p>参考 AISmart 投研 Agent + stockgod.xyz 五方判读思路。</p>
+      </div>
+      <div class="pipeline">
+        <article class="panel" style="min-height:430px">
+          <h3>确定性核心</h3>
+          <p>LLM 不能自由决定哪个标的更强。</p>
+          <div class="step-list">
+            <div class="step"><span class="num">01</span><div><strong>数据层</strong><span>AkShare 真实 A 股 ETF 行情 + 沪深300 + 主力资金流。</span></div></div>
+            <div class="step"><span class="num">02</span><div><strong>策略层</strong><span>动量/趋势/量价/风险四维评分，Top4 + MA20 + 止损冷却。</span></div></div>
+            <div class="step"><span class="num">03</span><div><strong>回测层</strong><span>真实历史回测，含佣金、滑点、滚动窗口胜率。</span></div></div>
+            <div class="step"><span class="num">04</span><div><strong>Agent 层</strong><span>解释为什么买/不买/卖/降仓，以及规则在哪里失效。</span></div></div>
+          </div>
+        </article>
+        <article class="panel">
+          <h3>拒绝的东西</h3>
+          <p>不做"今日神票"。</p>
+          <div class="logic-grid">
+            <div class="metric"><small>自由荐股</small><strong>0</strong></div>
+            <div class="metric"><small>黑箱参数</small><strong>0</strong></div>
+            <div class="metric"><small>复盘缺失</small><strong>0</strong></div>
+            <div class="metric"><small>回测外推</small><strong>0</strong></div>
+          </div>
+        </article>
+        <article class="panel">
+          <h3>输出形态</h3>
+          <p>每天只产三类东西。</p>
+          <div class="step-list">
+            <div class="step"><span class="num">A</span><div><strong>研究摘要</strong><span>热力图、动量排名、主力资金。</span></div></div>
+            <div class="step"><span class="num">B</span><div><strong>执行建议</strong><span>买多少、为什么、为什么不买。</span></div></div>
+            <div class="step"><span class="num">C</span><div><strong>错误复盘</strong><span>止损、冷却、规则失效。</span></div></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 风控 -->
+    <section id="risk">
+      <div class="section-head">
+        <h2>风控状态机</h2>
+        <p>当前状态由沪深300 实时数据驱动。</p>
+      </div>
+      <div class="risk" id="risk-cards">
+        <article class="risk-card" data-state="进攻"><small>STATE 01</small><h3>进攻</h3><p>HS300 站上 MA20 + 动量为正。满仓允许，仍受止损约束。</p></article>
+        <article class="risk-card" data-state="弱市"><small>STATE 02</small><h3>弱市</h3><p>跌破 MA20 或动量转负。仓位上限 70%。</p></article>
+        <article class="risk-card" data-state="确认熊市"><small>STATE 03</small><h3>确认熊市</h3><p>趋势和动量同时恶化。仓位上限 25%。</p></article>
+        <article class="risk-card" data-state="冷却"><small>STATE 04</small><h3>冷却</h3><p>止损后 10 个交易日不买回。</p></article>
+      </div>
+    </section>
+
+    <!-- 复盘 -->
+    <section id="report">
+      <div class="section-head">
+        <h2>可追责报告</h2>
+        <p>必须把"为什么"和"错了怎么办"写清楚。</p>
+      </div>
+      <div class="report">
+        <article class="report-card">
+          <header><span>daily-brief.md</span><span id="brief-time">--</span></header>
+          <div class="content checklist">
+            <div class="check" id="brief-state">--</div>
+            <div class="check" id="brief-ranking">--</div>
+            <div class="check" id="brief-position">--</div>
+            <div class="check">无异常提示。</div>
+          </div>
+        </article>
+        <article class="report-card">
+          <header><span>postmortem.md</span><span>after close</span></header>
+          <div class="content checklist">
+            <div class="check">买入是否符合规则，而非被新闻/大V带偏。</div>
+            <div class="check">止损是否执行，是否盘中随意改计划。</div>
+            <div class="check">同类历史窗口表现如何。</div>
+            <div class="check">下一步只允许可回测参数变更。</div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">
+      <span>牛研社 / A 股策略研究 Agent / 数据源: AkShare</span>
+      <span>研究工具，不构成投资建议。回测不等于未来。</span>
+    </div>
+  </footer>
+
+  <script>
+    async function fetchJSON(url) {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`API ${resp.status}`);
+      return resp.json();
+    }
+
+    // 市场状态
+    async function loadMarket() {
+      try {
+        const data = await fetchJSON("data/market.json");
+        const m = data.market;
+        document.getElementById("market-state").textContent = m.state;
+        document.getElementById("position-cap").textContent = (m.position_cap * 100) + "%";
+        document.getElementById("hs300-close").textContent = m.hs300_close?.toFixed(0) || "--";
+        const pillEl = document.getElementById("market-pill");
+        pillEl.className = "pill " + (m.state === "进攻" ? "" : m.state === "弱市" ? "warning" : "danger");
+        pillEl.textContent = m.above_ma20 ? "ABOVE MA20" : "BELOW MA20";
+        document.getElementById("cap-pill").textContent = "CAP " + (m.position_cap * 100) + "%";
+        document.getElementById("hs300-pill").textContent = "MOM " + (m.momentum_20d > 0 ? "+" : "") + m.momentum_20d + "%";
+        document.querySelectorAll(".risk-card").forEach(c => {
+          c.classList.remove("active","warning","danger");
+          if (c.dataset.state === m.state) c.classList.add("active");
+        });
+        document.getElementById("brief-state").textContent = `市场状态: ${m.state}，仓位上限 ${(m.position_cap*100)}%，HS300 ${m.hs300_close?.toFixed(0)||"--"} (MA20 ${m.hs300_ma20?.toFixed(0)||"--"})。`;
+        document.getElementById("brief-position").textContent = `仓位建议: 状态机反推，当前上限 ${(m.position_cap*100)}%。`;
+        if (data.sparkline?.length > 1) drawSparkline(data.sparkline);
+      } catch(e) { document.getElementById("market-state").innerHTML = '<span class="error-text">加载失败</span>'; }
+    }
+
+    function drawSparkline(points) {
+      const c = document.getElementById("sparkline-container"), w=420, h=96;
+      const closes = points.map(p=>p.close), min=Math.min(...closes), max=Math.max(...closes), range=max-min||1;
+      const step = w/(closes.length-1); let d="";
+      closes.forEach((v,i)=>{ d+=(i===0?"M":" L")+(i*step).toFixed(1)+" "+(h-((v-min)/range)*(h-12)-6).toFixed(1); });
+      c.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${d} L${w} ${h} L0 ${h} Z" fill="rgba(143,209,143,.09)"/><path d="${d}" fill="none" stroke="rgba(143,209,143,.92)" stroke-width="3"/></svg>`;
+    }
+
+    // 热力图
+    async function loadHeatmap() {
+      try {
+        const data = await fetchJSON("data/heatmap.json");
+        const grid = document.getElementById("heatmap-grid");
+        const items = data.heatmap || [];
+        if (!items.length) { grid.innerHTML = '<span class="error-text">无数据</span>'; return; }
+        let html = "";
+        for (const h of items) {
+          const pct = h.pct_change || 0;
+          const intensity = Math.min(1, Math.abs(pct) / 8);
+          const bg = pct > 0 ? `rgba(143,209,143,${.08+intensity*.25})` : pct < 0 ? `rgba(217,134,121,${.08+intensity*.25})` : "rgba(255,255,255,.03)";
+          const border = pct > 0 ? "rgba(143,209,143,.3)" : pct < 0 ? "rgba(217,134,121,.3)" : "var(--line)";
+          const pctColor = pct > 0 ? "var(--accent)" : pct < 0 ? "var(--danger)" : "var(--muted)";
+          const inflowStr = h.main_inflow ? (h.main_inflow > 0 ? "+" : "") + (h.main_inflow/10000).toFixed(0) + "万" : "";
+          html += `<div class="heat-cell" style="background:${bg};border-color:${border}" title="${h.name} 评分${h.score} RSI${h.rsi}">
+            <div class="hc-name">${h.name}</div>
+            <div class="hc-pct" style="color:${pctColor}">${pct>0?"+":""}${pct.toFixed(2)}%</div>
+            <div class="hc-score">评分 ${h.score}</div>
+            <div class="hc-inflow">${inflowStr}</div>
+          </div>`;
+        }
+        grid.innerHTML = html;
+      } catch(e) { document.getElementById("heatmap-grid").innerHTML = '<span class="error-text">加载失败</span>'; }
+    }
+
+    // 排名
+    async function loadRanking() {
+      try {
+        const data = await fetchJSON("data/ranking.json");
+        const c = document.getElementById("ranking-container");
+        const ranking = data.ranking || [];
+        if (!ranking.length) { c.innerHTML = '<span class="error-text">无数据</span>'; return; }
+        let html = '<table class="ranking-table"><thead><tr><th>代码</th><th>名称</th><th>评分</th><th>动量</th><th>RSI</th><th>量比</th><th>MA20</th></tr></thead><tbody>';
+        for (const r of ranking) {
+          const cls = r.selected ? "selected" : "";
+          const scorePct = Math.min(100, r.score);
+          const momC = r.momentum_20d > 0 ? "color:var(--accent)" : "color:var(--danger)";
+          const rsiC = r.rsi > 70 ? "color:var(--danger)" : r.rsi < 30 ? "color:var(--accent)" : "";
+          html += `<tr class="${cls}"><td>${r.code}</td><td style="font-family:var(--sans)">${r.name}</td><td>${r.score}<span class="score-bar"><span class="score-fill" style="width:${scorePct}%"></span></span></td><td style="${momC}">${r.momentum_20d>0?"+":""}${r.momentum_20d}%</td><td style="${rsiC}">${r.rsi}</td><td>${r.vol_ratio.toFixed(2)}</td><td>${r.above_ma20?"上":"下"}</td></tr>`;
+        }
+        html += '</tbody></table>';
+        c.innerHTML = html;
+        const sel = ranking.filter(r=>r.selected);
+        document.getElementById("brief-ranking").textContent = `候选池 Top4: ${sel.map(r=>r.name+"("+r.score+"分)").join("、")}。`;
+        document.getElementById("brief-time").textContent = new Date().toLocaleTimeString("zh-CN",{hour12:false})+" CST";
+      } catch(e) { document.getElementById("ranking-container").innerHTML = '<span class="error-text">加载失败</span>'; }
+    }
+
+    // 回测
+    async function loadBacktest() {
+      try {
+        const data = await fetchJSON("data/backtest.json");
+        if (data.error) throw new Error(data.error);
+        const fmt = v => (v>=0?"+":"")+v.toFixed(2)+"%";
+        document.getElementById("bt-total-return").textContent = fmt(data.total_return_pct);
+        document.getElementById("bt-annual").textContent = fmt(data.annual_return_pct);
+        document.getElementById("bt-drawdown").textContent = data.max_drawdown_pct.toFixed(2)+"%";
+        document.getElementById("bt-winrate").textContent = data.win_rate_pct.toFixed(1)+"%";
+        if (data.total_return_pct >= 0) document.getElementById("bt-total-return").parentElement.classList.add("positive");
+        drawNavChart(data.nav_history||[]); renderTradeLog(data.trade_log||[]);
+      } catch(e) { document.getElementById("bt-total-return").innerHTML = '<span class="error-text">失败</span>'; }
+    }
+
+    function drawNavChart(history) {
+      if (!history.length) return;
+      const c = document.getElementById("nav-chart"), w=600, h=260;
+      const navs = history.map(p=>p.nav), min=Math.min(...navs), max=Math.max(...navs), range=max-min||1;
+      const step=w/(navs.length-1); let d="";
+      navs.forEach((v,i)=>{ d+=(i===0?"M":" L")+(i*step).toFixed(1)+" "+(h-((v-min)/range)*(h-20)-10).toFixed(1); });
+      const up = navs[navs.length-1]>=navs[0];
+      const fc = up?"rgba(143,209,143,.12)":"rgba(217,134,121,.12)", sc=up?"rgba(143,209,143,.9)":"rgba(217,134,121,.9)";
+      c.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:100%"><path d="${d} L${w} ${h} L0 ${h} Z" fill="${fc}"/><path d="${d}" fill="none" stroke="${sc}" stroke-width="2.5"/><text x="8" y="20" fill="rgba(140,150,145,.8)" font-size="11" font-family="monospace">NAV ${min.toLocaleString(undefined,{maximumFractionDigits:0})} → ${max.toLocaleString(undefined,{maximumFractionDigits:0})}</text></svg>`;
+    }
+
+    function renderTradeLog(logs) {
+      const body = document.getElementById("trade-log-body");
+      if (!logs.length) { body.innerHTML = '<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:20px">无交易记录</td></tr>'; return; }
+      let html = "";
+      for (const t of [...logs].reverse()) {
+        const label = t.action==="buy"?"买入":t.action==="sell"?"卖出":"止损";
+        const cls = `action-${t.action}`;
+        html += `<tr><td>${t.date}</td><td class="${cls}">${label}</td><td>${t.symbol} ${t.name||""}</td><td>${t.price?.toFixed(3)||"--"}</td><td>${t.shares?.toFixed(0)||"--"}</td></tr>`;
+      }
+      body.innerHTML = html;
+    }
+
+    // 聪明钱
+    async function loadSmart() {
+      try {
+        const data = await fetchJSON("data/etf_spot.json");
+        const body = document.getElementById("smart-body");
+        const spots = data.spots || [];
+        if (!spots.length) { body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">无数据</td></tr>'; return; }
+        spots.sort((a,b) => (b.main_net_inflow||0) - (a.main_net_inflow||0));
+        let html = "";
+        for (const s of spots) {
+          const inflow = (s.main_net_inflow||0) / 10000;
+          const inflowColor = inflow > 0 ? "color:var(--accent)" : "color:var(--danger)";
+          const pctColor = s.pct_change > 0 ? "color:var(--accent)" : "color:var(--danger)";
+          html += `<tr><td>${s.code}</td><td style="font-family:var(--sans)">${s.name}</td><td>${s.price?.toFixed(3)||"--"}</td><td style="${pctColor}">${s.pct_change>0?"+":""}${s.pct_change?.toFixed(2)||"--"}%</td><td style="${inflowColor}">${inflow>0?"+":""}${inflow.toFixed(0)}</td><td>${s.main_net_pct?.toFixed(2)||"--"}%</td></tr>`;
+        }
+        body.innerHTML = html;
+      } catch(e) { document.getElementById("smart-body").innerHTML = '<tr><td colspan="6" class="error-text">加载失败</td></tr>'; }
+    }
+
+    // 盘报
+    async function loadBrief() {
+      try {
+        const data = await fetchJSON("data/brief.json");
+        const grid = document.getElementById("brief-grid");
+        const m = data.market || {};
+        const top = data.top_momentum || [];
+        const sel = data.selected || [];
+
+        grid.innerHTML = `
+          <div class="brief-card">
+            <h4>市场状态</h4>
+            <ul>
+              <li><strong>${m.state||"--"}</strong> · 仓位上限 <strong>${(m.position_cap*100)||"--"}%</strong></li>
+              <li>HS300: <strong>${m.hs300_close?.toFixed(0)||"--"}</strong> (MA20 ${m.hs300_ma20?.toFixed(0)||"--"})</li>
+              <li>20日动量: <strong>${m.momentum_20d||"--"}%</strong></li>
+              <li>大涨(${">5%"}) <strong>${data.gainers_count||0}</strong> / 大跌(${"<-5%"}) <strong>${data.losers_count||0}</strong> / 共 ${data.total_pool||0}</li>
+            </ul>
+          </div>
+          <div class="brief-card">
+            <h4>Top5 动量</h4>
+            <ul>
+              ${top.map(t=>`<li>${t.name} <strong>${t.momentum>0?"+":""}${t.momentum}%</strong> 评分${t.score}</li>`).join("")}
+            </ul>
+          </div>
+          <div class="brief-card">
+            <h4>候选池 Top4</h4>
+            <ul>
+              ${sel.length ? sel.map(s=>`<li>${s.name} 评分<strong>${s.score}</strong> RSI ${s.rsi}</li>`).join("") : '<li>当前无符合条件标的（均未站上MA20）</li>'}
+            </ul>
+          </div>
+          <div class="brief-card">
+            <h4>HS300 近5日</h4>
+            <ul>
+              ${(data.hs300_5d||[]).map(d=>`<li>${d.date} <strong>${d.close}</strong></li>`).join("")}
+            </ul>
+          </div>
+        `;
+      } catch(e) { document.getElementById("brief-grid").innerHTML = '<div class="brief-card"><h4 class="error-text">盘报加载失败</h4></div>'; }
+    }
+
+    // 启动
+    loadMarket(); loadHeatmap(); loadRanking(); loadBacktest(); loadSmart(); loadBrief();
+  </script>
+</body>
+</html>
