@@ -487,6 +487,10 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             self._handle_heatmap()
         elif path == "/api/brief":
             self._handle_brief()
+        elif path == "/api/chain":
+            self._handle_chain()
+        elif path == "/api/radar":
+            self._handle_radar()
         else:
             self._json({"error": "not found"}, 404)
 
@@ -604,15 +608,11 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
             ranking = get_etf_ranking()
             selected = [r for r in ranking if r["selected"]]
             top_momentum = ranking[:5] if ranking else []
-            # 大涨大跌统计
             gainers = [r for r in ranking if r["momentum_20d"] > 5]
             losers = [r for r in ranking if r["momentum_20d"] < -5]
 
-            # HS300 近5日
             recent = hs300.tail(5)
-            hs5d = []
-            for _, row in recent.iterrows():
-                hs5d.append({"date": row["date"].strftime("%Y-%m-%d"), "close": round(row["close"], 2)})
+            hs5d = [{"date": row["date"].strftime("%Y-%m-%d"), "close": round(row["close"], 2)} for _, row in recent.iterrows()]
 
             self._json({
                 "market": market,
@@ -624,6 +624,96 @@ class APIHandler(http.server.BaseHTTPRequestHandler):
                 "total_pool": len(ranking),
                 "updated": dt.datetime.now().isoformat(),
             })
+        except Exception as e:
+            self._json({"error": str(e)}, 503)
+
+    def _handle_chain(self):
+        """产业链视图：AI算力 + 机器人，ETF 映射到产业链环节"""
+        ranking_map = {}
+        try:
+            ranking = get_etf_ranking()
+            ranking_map = {r["code"]: r for r in ranking}
+        except Exception:
+            pass
+
+        chain = {
+            "title": "AI算力 + 机器人 产业链",
+            "subtitle": "ETF 池映射到产业链环节，参考 ainiusq.com/niu 看板",
+            "updated": dt.datetime.now().isoformat(),
+            "layers": [
+                {"layer": "上游", "nodes": [
+                    {"segment": "AI芯片", "etfs": ["512480", "512760"], "desc": "GPU/ASIC/芯片设计", "cycle": "成长期"},
+                    {"segment": "存储芯片", "etfs": [], "desc": "HBM/DRAM/NAND", "cycle": "复苏期"},
+                    {"segment": "光模块", "etfs": ["515880"], "desc": "800G/1.6T光连接", "cycle": "爆发期"},
+                    {"segment": "PCB/连接器", "etfs": [], "desc": "高速PCB、连接器", "cycle": "成长期"},
+                    {"segment": "电源/散热", "etfs": [], "desc": "VRM、液冷、热管理", "cycle": "成长期"},
+                ]},
+                {"layer": "中游", "nodes": [
+                    {"segment": "服务器/算力", "etfs": [], "desc": "AI服务器、算力租赁", "cycle": "扩张期"},
+                    {"segment": "通信基础设施", "etfs": ["515880"], "desc": "交换机、光网络", "cycle": "成长期"},
+                    {"segment": "机器人执行器", "etfs": ["562500"], "desc": "关节、电控、散热", "cycle": "导入期"},
+                    {"segment": "机器人感知", "etfs": ["562500"], "desc": "视觉、力矩、定位", "cycle": "导入期"},
+                ]},
+                {"layer": "下游", "nodes": [
+                    {"segment": "应用/软件", "etfs": [], "desc": "AI应用、Agent、软件", "cycle": "概念期"},
+                    {"segment": "整机/集成", "etfs": ["512660"], "desc": "机器人整机、系统集成", "cycle": "导入期"},
+                    {"segment": "消费/白酒", "etfs": ["512690", "515170"], "desc": "消费场景", "cycle": "成熟期"},
+                    {"segment": "医药/生物", "etfs": ["512010"], "desc": "医疗机器人、AI制药", "cycle": "概念期"},
+                ]},
+            ],
+            "theme_chains": [
+                {"name": "AI算力", "key": "ai_compute", "etfs": ["512480", "512760", "515880"]},
+                {"name": "机器人", "key": "robotics", "etfs": ["562500", "512660"]},
+                {"name": "半导体", "key": "semiconductor", "etfs": ["512480", "512760"]},
+                {"name": "新能源", "key": "new_energy", "etfs": ["515790", "515030"]},
+                {"name": "消费", "key": "consumer", "etfs": ["512690", "515170"]},
+                {"name": "金融", "key": "finance", "etfs": ["512800", "512070"]},
+                {"name": "军工", "key": "defense", "etfs": ["512660", "512670"]},
+                {"name": "宽基", "key": "broad", "etfs": ["510300", "510500", "510050", "159915", "512100"]},
+            ],
+            "nodes": [],
+        }
+
+        # 填充每个环节的 ETF 详细数据 + S/A/B 分级
+        for layer in chain["layers"]:
+            for node in layer["nodes"]:
+                node_etfs = []
+                for code in node["etfs"]:
+                    r = ranking_map.get(code)
+                    if r:
+                        grade = "S" if r["score"] >= 80 else "A" if r["score"] >= 60 else "B" if r["score"] >= 40 else "C"
+                        node_etfs.append({
+                            "code": code, "name": r["name"], "score": r["score"], "grade": grade,
+                            "momentum": r["momentum_20d"], "rsi": r["rsi"], "above_ma20": r["above_ma20"],
+                        })
+                node["etf_data"] = node_etfs
+                chain["nodes"].append(node)
+
+        self._json(chain)
+
+    def _handle_radar(self):
+        """变局雷达：动量变化最大的标的"""
+        try:
+            ranking = get_etf_ranking()
+            # 按动量绝对值排序（变化最大的）
+            radar = sorted(ranking, key=lambda x: abs(x["momentum_20d"]), reverse=True)[:10]
+            result = []
+            for r in radar:
+                grade = "S" if r["score"] >= 80 else "A" if r["score"] >= 60 else "B" if r["score"] >= 40 else "C"
+                direction = "加速" if r["momentum_20d"] > 0 else "减速"
+                alert = ""
+                if r["rsi"] > 70:
+                    alert = "RSI超买"
+                elif r["rsi"] < 30:
+                    alert = "RSI超卖"
+                if not r["above_ma20"]:
+                    alert += ("趋势破位" if alert else "趋势破位")
+                result.append({
+                    "code": r["code"], "name": r["name"], "score": r["score"], "grade": grade,
+                    "momentum": r["momentum_20d"], "rsi": r["rsi"], "direction": direction,
+                    "alert": alert, "above_ma20": r["above_ma20"],
+                })
+            self._json({"radar": result, "updated": dt.datetime.now().isoformat()})
         except Exception as e:
             self._json({"error": str(e)}, 503)
 

@@ -166,6 +166,8 @@
     <a class="brand" href="#top"><span class="brand-mark"></span><span>牛研社</span></a>
     <div class="nav-links">
       <a href="#heatmap">热力图</a>
+      <a href="#chain">产业链</a>
+      <a href="#radar">变局雷达</a>
       <a href="#lab">策略实验室</a>
       <a href="#smart">聪明钱</a>
       <a href="#brief">盘报</a>
@@ -207,6 +209,34 @@
         <h3>全景热力</h3>
         <p>颜色深浅 = 涨跌幅幅度；左上角分数 = 多策略综合评分。</p>
         <div class="heatmap-grid" id="heatmap-grid"><span class="loading"></span> 加载中…</div>
+      </div>
+    </section>
+
+    <!-- 产业链 -->
+    <section id="chain">
+      <div class="section-head">
+        <h2>产业链看板</h2>
+        <p>参考 ainiusq.com/niu 产业链看板，ETF 池映射到 AI算力 + 机器人 产业链环节。每个环节标注周期位置和 S/A/B 分级。</p>
+      </div>
+      <div class="panel">
+        <h3>AI算力 + 机器人 产业链</h3>
+        <p>综合分 = 动量40% + 趋势30% + 量价15% + 风险15%。S≥80 / A≥60 / B≥40 / C<40。</p>
+        <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap" id="theme-filter">
+          <button class="btn" style="padding:8px 14px;font-size:13px" data-theme="all">全部</button>
+        </div>
+        <div id="chain-container" style="margin-top:24px"><span class="loading"></span> 加载中…</div>
+      </div>
+    </section>
+
+    <!-- 变局雷达 -->
+    <section id="radar">
+      <div class="section-head">
+        <h2>变局雷达</h2>
+        <p>动量变化最大的标的，标注加速/减速、RSI超买/超卖、趋势破位。参考 ainiusq.com/niu 的变局雷达功能。</p>
+      </div>
+      <div class="panel">
+        <h3>动量异动 Top10</h3>
+        <div id="radar-container" style="margin-top:20px"><span class="loading"></span> 加载中…</div>
       </div>
     </section>
 
@@ -539,8 +569,107 @@
       } catch(e) { document.getElementById("brief-grid").innerHTML = '<div class="brief-card"><h4 class="error-text">盘报加载失败</h4></div>'; }
     }
 
+    // 产业链
+    let chainData = null;
+    async function loadChain() {
+      try {
+        chainData = await fetchJSON("data/chain.json");
+        // 题材链按钮
+        const filterEl = document.getElementById("theme-filter");
+        let fhtml = '<button class="btn" style="padding:8px 14px;font-size:13px" data-theme="all" onclick="filterChain(\'all\')">全部</button>';
+        for (const t of chainData.theme_chains || []) {
+          fhtml += `<button class="btn" style="padding:8px 14px;font-size:13px" data-theme="${t.key}" onclick="filterChain('${t.key}')">${t.name}</button>`;
+        }
+        filterEl.innerHTML = fhtml;
+        renderChain("all");
+      } catch(e) { document.getElementById("chain-container").innerHTML = '<span class="error-text">加载失败</span>'; }
+    }
+
+    function filterChain(key) {
+      document.querySelectorAll("#theme-filter button").forEach(b => {
+        b.style.borderColor = b.dataset.theme === key ? "rgba(143,209,143,.5)" : "var(--line)";
+        b.style.background = b.dataset.theme === key ? "rgba(143,209,143,.12)" : "rgba(255,255,255,.035)";
+      });
+      renderChain(key);
+    }
+
+    function renderChain(filterKey) {
+      if (!chainData) return;
+      const c = document.getElementById("chain-container");
+      let html = "";
+      const gradeColor = {S:"#8fd18f", A:"#d7b56d", B:"#8c9691", C:"#d98679"};
+      const cycleColor = {"成长期":"#8fd18f", "爆发期":"#d7b56d", "扩张期":"#8fd18f", "导入期":"#d98679", "复苏期":"#8fd18f", "概念期":"#8c9691", "成熟期":"#8c9691"};
+
+      for (const layer of chainData.layers || []) {
+        html += `<div style="margin-bottom:28px">`;
+        html += `<div style="font-family:var(--mono);font-size:13px;color:var(--accent-2);margin-bottom:12px;letter-spacing:.08em">${layer.layer.toUpperCase()}</div>`;
+        html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">`;
+        for (const node of layer.nodes || []) {
+          // 如果有题材筛选，只显示包含该题材ETF的环节
+          if (filterKey !== "all") {
+            const theme = (chainData.theme_chains || []).find(t => t.key === filterKey);
+            if (theme) {
+              const nodeEtfs = new Set(node.etfs || []);
+              const hasMatch = theme.etfs.some(e => nodeEtfs.has(e));
+              if (!hasMatch) continue;
+            }
+          }
+          const etfData = node.etf_data || [];
+          const cycleC = cycleColor[node.cycle] || "var(--muted)";
+          html += `<div style="border:1px solid var(--line);border-radius:20px;padding:16px;background:rgba(255,255,255,.03)">`;
+          html += `<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">`;
+          html += `<div><strong style="font-size:16px">${node.segment}</strong><div style="font-size:12px;color:var(--muted);margin-top:2px">${node.desc}</div></div>`;
+          html += `<span style="font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:999px;border:1px solid ${cycleC};color:${cycleC};background:${cycleC}15">${node.cycle}</span>`;
+          html += `</div>`;
+          if (etfData.length) {
+            html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">`;
+            for (const e of etfData) {
+              const gc = gradeColor[e.grade] || "var(--muted)";
+              const momC = e.momentum > 0 ? "var(--accent)" : "var(--danger)";
+              html += `<div style="border:1px solid var(--line);border-radius:14px;padding:10px 12px;min-width:120px">`;
+              html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px">`;
+              html += `<span style="font-size:13px">${e.name}</span>`;
+              html += `<span style="font-family:var(--mono);font-weight:700;font-size:16px;color:${gc}">${e.grade}</span>`;
+              html += `</div>`;
+              html += `<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px">评分 ${e.score}</div>`;
+              html += `<div style="font-family:var(--mono);font-size:11px;color:${momC};margin-top:2px">动量 ${e.momentum>0?"+":""}${e.momentum}%</div>`;
+              html += `<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px">RSI ${e.rsi} ${e.above_ma20?"| MA20上方":"| MA20下方"}</div>`;
+              html += `</div>`;
+            }
+            html += `</div>`;
+          } else {
+            html += `<div style="font-size:12px;color:var(--muted);margin-top:10px;font-style:italic">无ETF覆盖（待扩充池子）</div>`;
+          }
+          html += `</div>`;
+        }
+        html += `</div></div>`;
+      }
+      c.innerHTML = html || '<div style="color:var(--muted);text-align:center;padding:40px">该题材链暂无对应ETF环节</div>';
+    }
+
+    // 变局雷达
+    async function loadRadar() {
+      try {
+        const data = await fetchJSON("data/radar.json");
+        const c = document.getElementById("radar-container");
+        const items = data.radar || [];
+        if (!items.length) { c.innerHTML = '<span class="error-text">无数据</span>'; return; }
+        const gradeColor = {S:"#8fd18f", A:"#d7b56d", B:"#8c9691", C:"#d98679"};
+        let html = '<table class="ranking-table"><thead><tr><th>标的</th><th>分级</th><th>评分</th><th>动量</th><th>RSI</th><th>方向</th><th>预警</th></tr></thead><tbody>';
+        for (const r of items) {
+          const gc = gradeColor[r.grade] || "var(--muted)";
+          const dirC = r.direction === "加速" ? "var(--accent)" : "var(--danger)";
+          const momC = r.momentum > 0 ? "var(--accent)" : "var(--danger)";
+          const alertC = r.alert ? "color:var(--danger)" : "color:var(--muted)";
+          html += `<tr><td style="font-family:var(--sans)">${r.name}</td><td style="color:${gc};font-weight:700;font-size:16px">${r.grade}</td><td>${r.score}</td><td style="${momC}">${r.momentum>0?"+":""}${r.momentum}%</td><td>${r.rsi}</td><td style="${dirC}">${r.direction}</td><td style="${alertC}">${r.alert || "正常"}</td></tr>`;
+        }
+        html += '</tbody></table>';
+        c.innerHTML = html;
+      } catch(e) { document.getElementById("radar-container").innerHTML = '<span class="error-text">加载失败</span>'; }
+    }
+
     // 启动
-    loadMarket(); loadHeatmap(); loadRanking(); loadBacktest(); loadSmart(); loadBrief();
+    loadMarket(); loadHeatmap(); loadRanking(); loadBacktest(); loadSmart(); loadBrief(); loadChain(); loadRadar();
   </script>
 </body>
 </html>
